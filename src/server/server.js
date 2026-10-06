@@ -206,8 +206,8 @@ app.post('/api/stream/resolve', async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
+// Start Server — store reference so Node's event loop stays alive
+const server = app.listen(PORT, () => {
   console.log('================================================================');
   console.log(`🎬 Multi-Audio Streaming Engine running on http://localhost:${PORT}`);
   console.log(`📺 Web Player accessible at: http://localhost:${PORT}`);
@@ -224,4 +224,34 @@ app.listen(PORT, () => {
       console.error('[Auto-Start] Transmuxer startup error:', err.message);
     });
   }
+});
+
+// Keep the event loop alive even when no HTTP connections are active
+// (prevents Node from exiting after the FFmpeg child process finishes)
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+const _keepAlive = setInterval(() => {}, 1 << 30);
+
+// Graceful shutdown on SIGINT (Ctrl+C) / SIGTERM
+function gracefulShutdown(signal) {
+  console.log(`\n[Server] Received ${signal}. Shutting down gracefully…`);
+  clearInterval(_keepAlive);
+  if (transmuxer.currentProcess) {
+    transmuxer.currentProcess.kill('SIGTERM');
+  }
+  server.close(() => {
+    console.log('[Server] HTTP server closed. Bye!');
+    process.exit(0);
+  });
+  // Force-exit after 5 s if close hangs
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Unhandled rejection:', reason);
 });
