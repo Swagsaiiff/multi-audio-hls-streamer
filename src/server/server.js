@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { HlsTransmuxer } from './hlsTransmuxer.js';
 import { probeMedia } from './ffmpegUtils.js';
+import { MoviesDriveProvider } from '../providers/cloudstream/MoviesDriveProvider.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,7 @@ const DEFAULT_MEDIA_FILE = path.resolve('./media/test.mkv');
 const HLS_OUTPUT_DIR = path.resolve('./temp/hls');
 
 const transmuxer = new HlsTransmuxer({ outputDir: HLS_OUTPUT_DIR });
+const moviesDrive = new MoviesDriveProvider();
 
 // Enable CORS for all origins
 app.use(cors());
@@ -108,13 +110,111 @@ app.get('/api/media/status', (req, res) => {
   res.json(transmuxer.getStatus());
 });
 
+// ─── CloudStream Provider APIs ────────────────────────────────────────────────
+
+/**
+ * GET /api/search?q=<title>&provider=moviesdrive
+ * Search for movies/shows using a provider
+ */
+app.get('/api/search', async (req, res) => {
+  const query = req.query.q ? String(req.query.q).trim() : '';
+  const provider = (req.query.provider || 'moviesdrive').toLowerCase();
+
+  if (!query) return res.status(400).json({ error: 'Query parameter ?q= is required' });
+
+  try {
+    let results = [];
+    if (provider === 'moviesdrive') {
+      results = await moviesDrive.search(query);
+    } else {
+      return res.status(400).json({ error: `Unknown provider: ${provider}. Supported: moviesdrive` });
+    }
+    res.json({ success: true, provider, query, results });
+  } catch (err) {
+    console.error('[API /api/search] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/resolve
+ * Body: { url: "<moviesdrive or mdrive.lol page URL>", quality: "1080p", episodeIndex: 0 }
+ * Returns resolved stream link(s) ready for the HLS transmuxer
+ */
+app.post('/api/resolve', async (req, res) => {
+  const { url, quality = '1080p', episodeIndex = 0 } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Body field "url" is required' });
+
+  try {
+    const streams = await moviesDrive.resolveStreams(url, { quality, episodeIndex });
+    res.json({ success: true, url, quality, streams });
+  } catch (err) {
+    console.error('[API /api/resolve] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/stream/resolve
+ * Body: { url: "<MoviesDrive page or direct mkv/mp4 URL>", quality: "1080p", episodeIndex: 0, headers: {} }
+ * All-in-one: resolves the stream URL then immediately fires the HLS transmuxer
+ */
+app.post('/api/stream/resolve', async (req, res) => {
+  const { url, quality = '1080p', episodeIndex = 0, headers: customHeaders } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Body field "url" is required' });
+
+  try {
+    let targetSource = url;
+    let streamHeaders = customHeaders || null;
+
+    // If it's not already a direct video URL, run the provider resolver first
+    const isDirectVideo = /\.(mkv|mp4|avi|webm)(\?|$)/i.test(url);
+    if (!isDirectVideo) {
+      console.log(`[API /api/stream/resolve] Resolving provider URL: ${url}`);
+      const streams = await moviesDrive.resolveStreams(url, { quality, episodeIndex });
+
+      const directStream = streams.find(s => s.directLink);
+      if (!directStream) {
+        // Return mirror links for the user to pick
+        return res.json({
+          success: false,
+          requiresManualStep: true,
+          message: 'No direct stream found. Mirror host links returned — click one to stream via direct URL input.',
+          streams
+        });
+      }
+
+      targetSource = directStream.url;
+      streamHeaders = directStream.headers || null;
+      console.log(`[API /api/stream/resolve] Resolved direct source: ${targetSource}`);
+    }
+
+    // Fire the transmuxer
+    transmuxer.start(targetSource, { headers: streamHeaders }).catch(err => {
+      console.error('[API /api/stream/resolve] Transmuxer runtime error:', err.message);
+    });
+
+    res.json({
+      success: true,
+      message: 'Transmuxing pipeline initialized',
+      resolvedSource: targetSource,
+      streamUrl: '/hls/master.m3u8'
+    });
+  } catch (err) {
+    console.error('[API /api/stream/resolve] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log('================================================================');
   console.log(`🎬 Multi-Audio Streaming Engine running on http://localhost:${PORT}`);
   console.log(`📺 Web Player accessible at: http://localhost:${PORT}`);
-  console.log(`📡 Dynamic Stream API: http://localhost:${PORT}/api/stream?url=<VIDEO_URL>`);
-  console.log(`📡 HLS Master Playlist: http://localhost:${PORT}/hls/master.m3u8`);
+  console.log(`🔍 Search API:  http://localhost:${PORT}/api/search?q=<TITLE>`);
+  console.log(`🔗 Resolve API: POST http://localhost:${PORT}/api/resolve  { url, quality }`);
+  console.log(`📡 Stream API:  POST http://localhost:${PORT}/api/stream/resolve  { url, quality }`);
+  console.log(`📡 HLS Master:  http://localhost:${PORT}/hls/master.m3u8`);
   console.log('================================================================\n');
 
   // Auto-start default sample if available

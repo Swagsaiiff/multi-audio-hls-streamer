@@ -3,681 +3,702 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Custom Media Player - Remote Multi-Audio Streamer</title>
+  <title>CloudStream HLS Engine — Multi-Audio Player</title>
+  <meta name="description" content="Research-grade multi-audio HLS streaming engine with CloudStream provider integration. Dual-audio track switching for Hindi/English content.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <!-- hls.js CDN -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
   <style>
     :root {
-      --bg-primary: #0a0d14;
-      --bg-card: rgba(18, 24, 38, 0.75);
-      --bg-input: rgba(10, 14, 23, 0.85);
-      --border-card: rgba(255, 255, 255, 0.08);
-      --accent-primary: #6366f1;
-      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
+      --bg: #080b12;
+      --bg-card: rgba(14, 20, 35, 0.8);
+      --bg-input: rgba(8, 11, 18, 0.9);
+      --border: rgba(255,255,255,0.07);
+      --border-hover: rgba(255,255,255,0.15);
+      --accent: #6366f1;
+      --accent2: #a855f7;
+      --accent3: #ec4899;
+      --grad: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      --grad-subtle: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(168,85,247,0.1) 100%);
+      --text: #f1f5f9;
+      --text-muted: #64748b;
+      --text-soft: #94a3b8;
       --success: #10b981;
       --warning: #f59e0b;
       --error: #ef4444;
+      --info: #3b82f6;
+      --radius: 14px;
+      --radius-sm: 8px;
+      --radius-lg: 20px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;font-family:'Outfit',-apple-system,sans-serif}
+    html{scroll-behavior:smooth}
+    body{
+      background-color:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      background-image:
+        radial-gradient(ellipse at 10% 5%, rgba(99,102,241,0.18) 0%, transparent 45%),
+        radial-gradient(ellipse at 90% 85%, rgba(236,72,153,0.13) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 50%, rgba(168,85,247,0.06) 0%, transparent 70%);
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* ── Layout ─────────────────────────────────────── */
+    .page{max-width:1100px;margin:0 auto;padding:2rem 1.25rem;display:flex;flex-direction:column;gap:1.25rem}
+
+    /* ── Header ─────────────────────────────────────── */
+    header{display:flex;align-items:center;justify-content:space-between;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+    .brand{display:flex;align-items:center;gap:.9rem}
+    .brand-icon{
+      width:46px;height:46px;border-radius:13px;
+      background:var(--grad);
+      display:flex;align-items:center;justify-content:center;
+      font-size:1.4rem;box-shadow:0 4px 18px rgba(99,102,241,.45);
+    }
+    .brand h1{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}
+    .brand p{font-size:.78rem;color:var(--text-muted);margin-top:.1rem}
+    .status-pill{
+      display:inline-flex;align-items:center;gap:.45rem;
+      padding:.35rem .9rem;border-radius:999px;font-size:.78rem;font-weight:600;
+      background:rgba(16,185,129,.12);color:var(--success);
+      border:1px solid rgba(16,185,129,.25);transition:all .3s;
+    }
+    .status-pill.warning{background:rgba(245,158,11,.12);color:var(--warning);border-color:rgba(245,158,11,.25)}
+    .status-pill.error{background:rgba(239,68,68,.12);color:var(--error);border-color:rgba(239,68,68,.25)}
+    .status-pill.info{background:rgba(59,130,246,.12);color:var(--info);border-color:rgba(59,130,246,.25)}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+    /* ── Card ────────────────────────────────────────── */
+    .card{
+      background:var(--bg-card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+      border:1px solid var(--border);border-radius:var(--radius-lg);
+      box-shadow:0 10px 40px rgba(0,0,0,.35);
     }
 
-    body {
-      background-color: var(--bg-primary);
-      color: var(--text-main);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
-      background-image: 
-        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.12) 0%, transparent 40%);
+    /* ── Tabs ────────────────────────────────────────── */
+    .tabs-bar{
+      display:flex;border-bottom:1px solid var(--border);
+      padding:0 1.5rem;gap:.25rem;
+    }
+    .tab-btn{
+      padding:.85rem 1.25rem;font-size:.875rem;font-weight:600;
+      background:none;border:none;color:var(--text-muted);cursor:pointer;
+      border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px;
+    }
+    .tab-btn:hover{color:var(--text-soft)}
+    .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .tab-panel{display:none;padding:1.5rem}
+    .tab-panel.active{display:block}
+
+    /* ── Search panel ────────────────────────────────── */
+    .search-row{display:flex;gap:.75rem}
+    .search-input{
+      flex:1;background:var(--bg-input);border:1px solid var(--border);
+      color:var(--text);padding:.8rem 1.1rem;border-radius:var(--radius-sm);
+      font-size:.9rem;outline:none;transition:border-color .2s,box-shadow .2s;
+    }
+    .search-input::placeholder{color:var(--text-muted)}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+
+    .btn{
+      display:inline-flex;align-items:center;gap:.5rem;
+      padding:.8rem 1.4rem;border:none;border-radius:var(--radius-sm);
+      font-size:.875rem;font-weight:700;cursor:pointer;transition:all .2s;
+    }
+    .btn-primary{background:var(--grad);color:#fff;box-shadow:0 3px 12px rgba(99,102,241,.4)}
+    .btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+    .btn-primary:active{transform:none}
+    .btn-ghost{background:rgba(255,255,255,.05);color:var(--text-soft);border:1px solid var(--border)}
+    .btn-ghost:hover{background:rgba(255,255,255,.1);border-color:var(--border-hover)}
+    .btn-sm{padding:.5rem 1rem;font-size:.8rem}
+    .btn-danger{background:rgba(239,68,68,.15);color:var(--error);border:1px solid rgba(239,68,68,.3)}
+
+    /* ── Results grid ────────────────────────────────── */
+    .results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:1rem;margin-top:1.25rem}
+    .result-card{
+      background:rgba(255,255,255,.03);border:1px solid var(--border);
+      border-radius:var(--radius);overflow:hidden;cursor:pointer;
+      transition:all .22s;
+    }
+    .result-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-3px);box-shadow:0 8px 24px rgba(99,102,241,.2)}
+    .result-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:#111;display:block}
+    .result-thumb-placeholder{width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#111 0%,#1a1f2e 100%);display:flex;align-items:center;justify-content:center;font-size:2rem}
+    .result-info{padding:.75rem}
+    .result-title{font-size:.82rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .result-meta{font-size:.72rem;color:var(--text-muted);margin-top:.35rem;display:flex;gap:.5rem;align-items:center}
+    .result-badge{
+      padding:.15rem .45rem;border-radius:4px;font-size:.68rem;font-weight:700;
+      background:rgba(99,102,241,.18);color:var(--accent);
     }
 
-    .container {
-      width: 100%;
-      max-width: 1040px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
+    /* ── URL Bar (Direct) ────────────────────────────── */
+    .url-section{display:flex;flex-direction:column;gap:.9rem}
+    .url-row{display:flex;gap:.75rem}
+    .quick-chips{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+    .chip-label{font-size:.75rem;color:var(--text-muted)}
+    .chip{
+      background:rgba(255,255,255,.04);border:1px solid var(--border);
+      color:var(--text-soft);padding:.3rem .7rem;border-radius:6px;
+      font-size:.76rem;cursor:pointer;transition:all .18s;
+    }
+    .chip:hover{background:rgba(255,255,255,.1);border-color:var(--border-hover);color:var(--text)}
+
+    /* ── Resolve panel ───────────────────────────────── */
+    .resolve-url-row{display:flex;gap:.75rem}
+    .quality-select{
+      background:var(--bg-input);border:1px solid var(--border);
+      color:var(--text);padding:.8rem .9rem;border-radius:var(--radius-sm);
+      font-size:.875rem;outline:none;cursor:pointer;min-width:110px;
+    }
+    .mirror-list{display:flex;flex-direction:column;gap:.6rem;margin-top:1rem}
+    .mirror-item{
+      display:flex;align-items:center;gap:1rem;
+      background:rgba(255,255,255,.03);border:1px solid var(--border);
+      border-radius:var(--radius-sm);padding:.85rem 1rem;
+    }
+    .mirror-icon{font-size:1.5rem}
+    .mirror-info{flex:1;min-width:0}
+    .mirror-title{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mirror-meta{font-size:.75rem;color:var(--text-muted)}
+    .mirror-host-badge{
+      padding:.2rem .55rem;border-radius:5px;font-size:.7rem;font-weight:700;
+      background:rgba(59,130,246,.15);color:var(--info);
     }
 
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border-card);
+    /* ── Player ──────────────────────────────────────── */
+    .player-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--radius-lg) var(--radius-lg) 0 0;overflow:hidden}
+    video{width:100%;height:100%;outline:none;display:block}
+    .player-overlay{
+      position:absolute;inset:0;
+      background:rgba(8,11,18,.92);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;
+      z-index:10;transition:opacity .35s;
     }
+    .player-overlay.hidden{opacity:0;pointer-events:none}
+    .spinner{width:52px;height:52px;border:4px solid rgba(255,255,255,.08);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .overlay-text{font-size:.9rem;color:var(--text-soft);text-align:center;max-width:280px}
+    .progress-track{width:260px;height:5px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+    .progress-fill{height:100%;background:var(--grad);width:0%;transition:width .3s}
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
+    /* ── Controls panel ──────────────────────────────── */
+    .controls-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;padding:1.5rem}
+    @media(max-width:700px){.controls-grid{grid-template-columns:1fr}}
+    .section-label{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
+    .audio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.65rem}
+    .audio-btn{
+      background:rgba(255,255,255,.04);border:1px solid var(--border);
+      color:var(--text);padding:.75rem 1rem;border-radius:var(--radius-sm);
+      cursor:pointer;font-size:.875rem;font-weight:600;
+      display:flex;flex-direction:column;align-items:flex-start;gap:.2rem;
+      transition:all .2s;
     }
+    .audio-btn:hover{background:rgba(255,255,255,.09);border-color:var(--border-hover);transform:translateY(-1px)}
+    .audio-btn.active{background:var(--grad);border-color:transparent;box-shadow:0 4px 14px rgba(99,102,241,.4)}
+    .audio-btn .tname{font-weight:700;font-size:.88rem}
+    .audio-btn .tmeta{font-size:.72rem;opacity:.75}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
+    .info-item{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.7rem .9rem}
+    .info-label{font-size:.7rem;color:var(--text-muted)}
+    .info-val{font-size:.9rem;font-weight:700;margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-    .brand-logo {
-      width: 42px;
-      height: 42px;
-      background: var(--accent-gradient);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 1.25rem;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    /* ── Toast ───────────────────────────────────────── */
+    #toast{
+      position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+      display:flex;flex-direction:column;gap:.5rem;pointer-events:none;
     }
-
-    .brand-text h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+    .toast-item{
+      padding:.75rem 1.25rem;border-radius:var(--radius-sm);font-size:.85rem;font-weight:500;
+      background:rgba(14,20,35,.96);border:1px solid var(--border);
+      backdrop-filter:blur(12px);box-shadow:0 6px 24px rgba(0,0,0,.4);
+      transform:translateX(100px);opacity:0;transition:all .3s;
     }
+    .toast-item.show{transform:none;opacity:1}
+    .toast-item.success{border-color:rgba(16,185,129,.4);color:var(--success)}
+    .toast-item.error{border-color:rgba(239,68,68,.4);color:var(--error)}
+    .toast-item.info{border-color:rgba(59,130,246,.4);color:var(--info)}
 
-    .brand-text p {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
+    /* ── Empty / loading states ──────────────────────── */
+    .empty-state{display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:2.5rem;color:var(--text-muted);text-align:center}
+    .empty-icon{font-size:2.5rem;opacity:.5}
+    .loading-row{display:flex;align-items:center;gap:.75rem;color:var(--text-muted);padding:.75rem}
+    .mini-spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.85rem;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
-    }
-
-    /* Remote URL Input Section */
-    .url-bar-card {
-      background: var(--bg-card);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border-card);
-      border-radius: 16px;
-      padding: 1rem 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-    }
-
-    .url-input-row {
-      display: flex;
-      gap: 0.75rem;
-    }
-
-    .url-input {
-      flex: 1;
-      background: var(--bg-input);
-      border: 1px solid var(--border-card);
-      color: var(--text-main);
-      padding: 0.75rem 1rem;
-      border-radius: 10px;
-      font-size: 0.9rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .url-input:focus {
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-    }
-
-    .btn-submit {
-      background: var(--accent-gradient);
-      border: none;
-      color: white;
-      padding: 0 1.5rem;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 0.9rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-
-    .btn-submit:hover {
-      opacity: 0.95;
-      transform: translateY(-1px);
-    }
-
-    .btn-submit:active {
-      transform: translateY(0);
-    }
-
-    .quick-tags {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    .quick-chip {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-card);
-      color: #cbd5e1;
-      padding: 0.25rem 0.65rem;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .quick-chip:hover {
-      background: rgba(255, 255, 255, 0.12);
-      color: #fff;
-    }
-
-    /* Player Card */
-    .player-card {
-      background: var(--bg-card);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border-card);
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    }
-
-    .video-wrapper {
-      position: relative;
-      width: 100%;
-      background: #000;
-      aspect-ratio: 16 / 9;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    video {
-      width: 100%;
-      height: 100%;
-      outline: none;
-    }
-
-    .player-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(10, 13, 20, 0.88);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-      z-index: 10;
-      transition: opacity 0.3s ease;
-    }
-
-    .player-overlay.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-top-color: #6366f1;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Control Panel */
-    .controls-panel {
-      padding: 1.5rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-    }
-
-    @media (max-width: 768px) {
-      .controls-panel {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .card-section {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .section-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    /* Audio Switcher Buttons */
-    .audio-tracks-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 0.75rem;
-    }
-
-    .audio-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-card);
-      color: var(--text-main);
-      padding: 0.75rem 1rem;
-      border-radius: 12px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      font-weight: 500;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.25rem;
-      transition: all 0.2s ease;
-    }
-
-    .audio-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-      transform: translateY(-2px);
-    }
-
-    .audio-btn.active {
-      background: var(--accent-gradient);
-      border-color: transparent;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
-    }
-
-    .audio-btn .track-name {
-      font-weight: 600;
-    }
-
-    .audio-btn .track-meta {
-      font-size: 0.75rem;
-      opacity: 0.8;
-    }
-
-    /* Info Grid */
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-
-    .info-item {
-      background: rgba(255, 255, 255, 0.03);
-      padding: 0.75rem 1rem;
-      border-radius: 10px;
-      border: 1px solid var(--border-card);
-      overflow: hidden;
-    }
-
-    .info-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    .info-val {
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-top: 0.2rem;
-      color: #e2e8f0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Progress bar for Transmuxer */
-    .progress-bar-container {
-      width: 100%;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 999px;
-      overflow: hidden;
-      margin-top: 0.5rem;
-    }
-
-    .progress-bar-fill {
-      height: 100%;
-      background: var(--accent-gradient);
-      width: 0%;
-      transition: width 0.3s ease;
+    @media(max-width:600px){
+      .page{padding:1rem .75rem}
+      .tabs-bar{padding:0 .75rem}
+      .tab-btn{padding:.75rem .75rem}
+      .results-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
     }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <!-- Header -->
-    <header>
-      <div class="brand">
-        <div class="brand-logo">▶</div>
-        <div class="brand-text">
-          <h1>CloudStream / HLS Player Engine</h1>
-          <p>Remote MKV Transmuxing & Dynamic Dual-Audio Switcher</p>
-        </div>
-      </div>
-      <div id="statusBadge" class="status-badge">
-        <div class="status-dot"></div>
-        <span id="statusText">Connecting...</span>
-      </div>
-    </header>
+<div class="page">
 
-    <!-- Remote URL Input Section -->
-    <div class="url-bar-card">
-      <div class="url-input-row">
-        <input 
-          type="text" 
-          id="urlInput" 
-          class="url-input" 
-          placeholder="Enter direct remote MKV / MP4 URL (e.g. http://server.com/movie.mkv)..." 
-          autocomplete="off"
-        />
-        <button id="btnLoadStream" class="btn-submit">
-          <span>⚡</span> Stream URL
-        </button>
+  <!-- ── Header ── -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">▶</div>
+      <div>
+        <h1>CloudStream HLS Engine</h1>
+        <p>Multi-audio HLS transmuxer · MoviesDrive provider · Research project</p>
       </div>
-      <div class="quick-tags">
-        <span>Quick Samples:</span>
-        <span class="quick-chip" onclick="setAndLoadUrl('./media/test.mkv')">Local Dual-Audio (test.mkv)</span>
-        <span class="quick-chip" onclick="setAndLoadUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')">Remote Sample (BigBuckBunny.mp4)</span>
+    </div>
+    <div id="statusPill" class="status-pill">
+      <div class="status-dot"></div>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <!-- ── Player Card ── -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="player-wrap">
+      <video id="video" controls playsinline></video>
+      <div id="playerOverlay" class="player-overlay">
+        <div class="spinner"></div>
+        <p class="overlay-text" id="overlayText">Initializing FFmpeg Transmuxer…</p>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Player Card -->
-    <div class="player-card">
-      <div class="video-wrapper">
-        <video id="videoPlayer" controls playsinline></video>
-        <div id="playerOverlay" class="player-overlay">
-          <div class="spinner"></div>
-          <p id="overlayText">Initializing FFmpeg Transmuxer...</p>
-          <div style="width: 260px;">
-            <div class="progress-bar-container">
-              <div id="progressFill" class="progress-bar-fill"></div>
-            </div>
-          </div>
+    <div class="controls-grid">
+      <div>
+        <div class="section-label">🔊 Audio Track</div>
+        <div class="audio-grid" id="audioGrid">
+          <p style="color:var(--text-muted);font-size:.82rem">Waiting for stream…</p>
         </div>
       </div>
-
-      <!-- Controls & Metadata -->
-      <div class="controls-panel">
-        <!-- Audio Track Switcher -->
-        <div class="card-section">
-          <div class="section-title">
-            <span>🔊</span> Select Audio Track
+      <div>
+        <div class="section-label">📊 Stream Info</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Source</div>
+            <div class="info-val" id="infoSource">—</div>
           </div>
-          <div id="audioTracksGrid" class="audio-tracks-grid">
-            <p style="color: var(--text-muted); font-size: 0.85rem;">Probing audio streams...</p>
+          <div class="info-item">
+            <div class="info-label">Audio</div>
+            <div class="info-val" id="infoAudio">—</div>
           </div>
-        </div>
-
-        <!-- Stream & Media Specs -->
-        <div class="card-section">
-          <div class="section-title">
-            <span>📊</span> Stream Technical Information
+          <div class="info-item">
+            <div class="info-label">Video</div>
+            <div class="info-val" style="color:var(--success)">H.264 (ultrafast)</div>
           </div>
-          <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label">Active Source</div>
-              <div class="info-val" id="valCurrentSource">test.mkv</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Current Audio</div>
-              <div class="info-val" id="valCurrentAudio">-</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Video Encoder</div>
-              <div class="info-val" style="color: var(--success);">H.264 (libx264 ultrafast)</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Audio Container</div>
-              <div class="info-val" style="color: #60a5fa;">Multi-Track AAC (HLS)</div>
-            </div>
+          <div class="info-item">
+            <div class="info-label">Container</div>
+            <div class="info-val" style="color:#60a5fa">Multi-Track AAC HLS</div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
-    const STREAM_URL = '/hls/master.m3u8';
-    const video = document.getElementById('videoPlayer');
-    const overlay = document.getElementById('playerOverlay');
-    const overlayText = document.getElementById('overlayText');
-    const progressFill = document.getElementById('progressFill');
-    const audioTracksGrid = document.getElementById('audioTracksGrid');
-    const statusText = document.getElementById('statusText');
-    const valCurrentSource = document.getElementById('valCurrentSource');
-    const valCurrentAudio = document.getElementById('valCurrentAudio');
-    const urlInput = document.getElementById('urlInput');
-    const btnLoadStream = document.getElementById('btnLoadStream');
+  <!-- ── Input Tabs ── -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="tabs-bar">
+      <button class="tab-btn active" data-tab="search" onclick="switchTab('search')">🔍 Search Provider</button>
+      <button class="tab-btn" data-tab="direct" onclick="switchTab('direct')">⚡ Direct URL</button>
+      <button class="tab-btn" data-tab="resolve" onclick="switchTab('resolve')">🔗 Resolve Page</button>
+    </div>
 
-    let hls = null;
-    let isHlsInitialized = false;
+    <!-- Tab: Search -->
+    <div class="tab-panel active" id="tab-search">
+      <div class="search-row">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search MoviesDrive… (e.g. One Piece, Spider-Man 2024)" autocomplete="off">
+        <button class="btn btn-primary" id="btnSearch" onclick="doSearch()">
+          <span id="searchBtnIcon">🔍</span> Search
+        </button>
+      </div>
+      <div id="searchResults"></div>
+    </div>
 
-    // Trigger dynamic stream loading
-    async function loadStream(targetUrl) {
-      if (!targetUrl) return;
+    <!-- Tab: Direct URL -->
+    <div class="tab-panel" id="tab-direct">
+      <div class="url-section">
+        <div class="url-row">
+          <input type="text" id="directUrlInput" class="search-input" placeholder="Paste direct .mkv / .mp4 URL (e.g. http://cdn.example.com/movie.mkv)…" autocomplete="off">
+          <button class="btn btn-primary" onclick="loadDirectUrl()">⚡ Stream</button>
+        </div>
+        <div class="quick-chips">
+          <span class="chip-label">Quick:</span>
+          <span class="chip" onclick="setDirectAndStream('./media/test.mkv')">🎬 Local test.mkv</span>
+          <span class="chip" onclick="setDirectAndStream('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')">🐰 BigBuckBunny.mp4</span>
+          <span class="chip" onclick="setDirectAndStream('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')">📡 HLS Test Stream</span>
+        </div>
+      </div>
+    </div>
 
-      console.log('[App] Requesting stream for:', targetUrl);
+    <!-- Tab: Resolve Page -->
+    <div class="tab-panel" id="tab-resolve">
+      <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem">
+        Paste a <strong style="color:var(--text-soft)">MoviesDrive</strong> content page URL or an <strong style="color:var(--text-soft)">mdrive.lol/archive/</strong> link. The engine will scrape and resolve it into direct stream links.
+      </p>
+      <div class="resolve-url-row">
+        <input type="text" id="resolveUrlInput" class="search-input" placeholder="https://new5.moviesdrive.christmas/movie-title/ or https://mdrive.lol/archive/1234/" autocomplete="off">
+        <select class="quality-select" id="resolveQuality">
+          <option value="1080p">1080p</option>
+          <option value="720p">720p</option>
+          <option value="480p">480p</option>
+          <option value="2160p">4K</option>
+        </select>
+        <button class="btn btn-primary" onclick="doResolve()">🔗 Resolve</button>
+      </div>
+      <div id="resolveResults" style="margin-top:1rem"></div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- Toast container -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════
+let hls = null;
+let hlsReady = false;
+const video = document.getElementById('video');
+const overlay = document.getElementById('playerOverlay');
+const overlayText = document.getElementById('overlayText');
+const progressFill = document.getElementById('progressFill');
+const audioGrid = document.getElementById('audioGrid');
+const statusPill = document.getElementById('statusPill');
+const statusText = document.getElementById('statusText');
+const infoSource = document.getElementById('infoSource');
+const infoAudio = document.getElementById('infoAudio');
+
+// ═══════════════════════════════════════════════════════
+//  Tabs
+// ═══════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+// ═══════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast-item ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  requestAnimationFrame(() => { requestAnimationFrame(() => el.classList.add('show')); });
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 350); }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  Status pill helper
+// ═══════════════════════════════════════════════════════
+function setStatus(text, type = 'success') {
+  statusText.textContent = text;
+  statusPill.className = `status-pill ${type}`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  HLS Player
+// ═══════════════════════════════════════════════════════
+function initHls() {
+  if (hlsReady) return;
+  if (hls) { hls.destroy(); hls = null; }
+
+  if (!Hls.isSupported()) {
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = '/hls/master.m3u8';
+      overlay.classList.add('hidden');
+      setStatus('Native HLS', 'success');
+    }
+    return;
+  }
+
+  hls = new Hls({ debug: false, enableWorker: true, lowLatencyMode: false, backBufferLength: 90 });
+  hls.loadSource('/hls/master.m3u8?t=' + Date.now());
+  hls.attachMedia(video);
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    overlay.classList.add('hidden');
+    setStatus('Streaming ✓', 'success');
+    hlsReady = true;
+    video.play().catch(() => {});
+  });
+
+  hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (e, data) => {
+    renderAudioButtons(data.audioTracks);
+  });
+
+  hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (e, data) => {
+    const t = hls.audioTracks[data.id];
+    if (t) infoAudio.textContent = `${t.name} (${t.lang || 'AAC'})`;
+    highlightAudio(data.id);
+  });
+
+  hls.on(Hls.Events.ERROR, (e, data) => {
+    if (!data.fatal) return;
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls.startLoad(); return; }
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+    hls.destroy(); setStatus('HLS Error', 'error'); toast('Fatal HLS error', 'error');
+  });
+}
+
+function renderAudioButtons(tracks) {
+  if (!tracks?.length) return;
+  audioGrid.innerHTML = '';
+  tracks.forEach((t, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'audio-btn' + (i === hls.audioTrack ? ' active' : '');
+    btn.innerHTML = `<span class="tname">${t.name || 'Track '+(i+1)}</span><span class="tmeta">${(t.lang||'und').toUpperCase()} · AAC</span>`;
+    btn.onclick = () => { hls.audioTrack = i; highlightAudio(i); };
+    audioGrid.appendChild(btn);
+  });
+  const active = tracks[hls.audioTrack];
+  if (active) infoAudio.textContent = `${active.name} (${active.lang || 'AAC'})`;
+}
+
+function highlightAudio(idx) {
+  audioGrid.querySelectorAll('.audio-btn').forEach((b,i) => b.classList.toggle('active', i === idx));
+}
+
+// ═══════════════════════════════════════════════════════
+//  Stream Launcher (all paths funnel here)
+// ═══════════════════════════════════════════════════════
+async function launchStream(url, opts = {}) {
+  overlay.classList.remove('hidden');
+  overlayText.textContent = 'Probing & initialising FFmpeg…';
+  progressFill.style.width = '0%';
+  setStatus('Initialising…', 'info');
+  hlsReady = false;
+  if (hls) { hls.destroy(); hls = null; }
+  audioGrid.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem">Probing audio streams…</p>';
+  infoSource.textContent = url.split('/').pop() || url;
+
+  const endpoint = opts.useResolve ? '/api/stream/resolve' : '/api/stream';
+  const body = opts.useResolve
+    ? { url, quality: opts.quality || '1080p', episodeIndex: opts.episodeIndex || 0 }
+    : { url };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    if (data.requiresManualStep) {
+      // Show mirror links
+      overlay.classList.add('hidden');
+      setStatus('Pick mirror', 'warning');
+      showMirrorLinks(data.streams, opts);
+      return;
+    }
+
+    if (!data.success) throw new Error(data.error || 'Stream init failed');
+    toast('✅ Transmuxer started', 'success');
+  } catch (err) {
+    overlayText.textContent = 'Error: ' + err.message;
+    setStatus('Error', 'error');
+    toast('❌ ' + err.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Direct URL Tab
+// ═══════════════════════════════════════════════════════
+function setDirectAndStream(url) {
+  document.getElementById('directUrlInput').value = url;
+  switchTab('direct');
+  loadDirectUrl();
+}
+
+function loadDirectUrl() {
+  const url = document.getElementById('directUrlInput').value.trim();
+  if (!url) { toast('Please enter a URL', 'error'); return; }
+  launchStream(url);
+}
+
+// ═══════════════════════════════════════════════════════
+//  Search Tab
+// ═══════════════════════════════════════════════════════
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) { toast('Enter a search term', 'error'); return; }
+
+  const container = document.getElementById('searchResults');
+  container.innerHTML = '<div class="loading-row"><div class="mini-spinner"></div> Searching MoviesDrive…</div>';
+  document.getElementById('searchBtnIcon').textContent = '⌛';
+
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+
+    if (!data.success || !data.results.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>No results found for "' + q + '"</p></div>';
+      return;
+    }
+
+    container.innerHTML = '<div class="results-grid">' +
+      data.results.map(r => `
+        <div class="result-card" onclick="openResultPage('${escHtml(r.url)}', '${escHtml(r.title)}')">
+          ${r.thumbnail
+            ? `<img class="result-thumb" src="${escHtml(r.thumbnail)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+            : ''}
+          <div class="result-thumb-placeholder" ${r.thumbnail ? 'style="display:none"' : ''}>🎬</div>
+          <div class="result-info">
+            <div class="result-title">${escHtml(r.title)}</div>
+            <div class="result-meta">
+              ${r.year ? `<span>${r.year}</span>` : ''}
+              <span class="result-badge">${r.type === 'TvSeries' ? '📺 Series' : '🎬 Movie'}</span>
+            </div>
+          </div>
+        </div>
+      `).join('') +
+    '</div>';
+
+    toast(`Found ${data.results.length} result(s)`, 'success');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>' + err.message + '</p></div>';
+    toast('Search failed: ' + err.message, 'error');
+  } finally {
+    document.getElementById('searchBtnIcon').textContent = '🔍';
+  }
+}
+
+function openResultPage(url, title) {
+  // Prefill the resolve tab and switch to it
+  document.getElementById('resolveUrlInput').value = url;
+  switchTab('resolve');
+  toast('🔗 Loading: ' + title.substring(0, 40), 'info');
+  doResolve();
+}
+
+// ═══════════════════════════════════════════════════════
+//  Resolve Tab
+// ═══════════════════════════════════════════════════════
+async function doResolve() {
+  const url = document.getElementById('resolveUrlInput').value.trim();
+  const quality = document.getElementById('resolveQuality').value;
+  if (!url) { toast('Enter a page URL to resolve', 'error'); return; }
+
+  const container = document.getElementById('resolveResults');
+  container.innerHTML = '<div class="loading-row"><div class="mini-spinner"></div> Resolving stream links…</div>';
+
+  try {
+    const res = await fetch('/api/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, quality })
+    });
+    const data = await res.json();
+
+    if (!data.success || !data.streams?.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>No stream links found. Try a different quality or check the URL.</p></div>';
+      return;
+    }
+
+    renderMirrorLinks(data.streams, container, quality);
+    toast(`Found ${data.streams.length} stream link(s)`, 'success');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>' + err.message + '</p></div>';
+    toast('Resolve failed: ' + err.message, 'error');
+  }
+}
+
+function renderMirrorLinks(streams, container, quality) {
+  const hostIcons = { 'hubcloud': '☁️', 'gdflix': '🎬', 'pixeldrain': '💧', 'gofile': '📁', 'buzzheavier': '🐝', 'filemoon': '🌙', 'streamwish': '⭐', 'animetosho': '🌸', 'mdrive': '💾' };
+  const getIcon = host => { const k = Object.keys(hostIcons).find(h => host.includes(h)); return k ? hostIcons[k] : '🔗'; };
+
+  container.innerHTML = '<div class="mirror-list">' +
+    streams.map((s, i) => {
+      const icon = getIcon(s.mirrorHost || s.source || '');
+      const isDirect = s.directLink;
+      return `
+        <div class="mirror-item">
+          <div class="mirror-icon">${icon}</div>
+          <div class="mirror-info">
+            <div class="mirror-title">${escHtml(s.title || s.url)}</div>
+            <div class="mirror-meta">
+              <span class="mirror-host-badge">${escHtml(s.mirrorHost || s.source)}</span>
+              ${s.quality ? `<span>${s.quality}</span>` : ''}
+              ${isDirect ? '<span style="color:var(--success)">✓ Direct</span>' : '<span style="color:var(--warning)">⚠ Mirror</span>'}
+            </div>
+          </div>
+          ${isDirect
+            ? `<button class="btn btn-primary btn-sm" onclick="streamDirectLink('${escHtml(s.url)}')">▶ Stream</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="copyUrl('${escHtml(s.url)}')">📋 Copy URL</button>`
+          }
+        </div>
+      `;
+    }).join('') +
+  '</div>';
+}
+
+function showMirrorLinks(streams, opts) {
+  const container = document.getElementById('resolveResults');
+  switchTab('resolve');
+  renderMirrorLinks(streams, container, opts.quality || '1080p');
+}
+
+function streamDirectLink(url) {
+  document.getElementById('directUrlInput').value = url;
+  switchTab('direct');
+  launchStream(url);
+}
+
+async function copyUrl(url) {
+  try { await navigator.clipboard.writeText(url); toast('URL copied!', 'success'); }
+  catch { toast('Copy failed', 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Status Polling
+// ═══════════════════════════════════════════════════════
+async function pollStatus() {
+  try {
+    const res = await fetch('/api/media/status');
+    const data = await res.json();
+
+    if (data.progress !== undefined) progressFill.style.width = data.progress + '%';
+    if (data.currentSource) infoSource.textContent = data.currentSource.split('/').pop() || data.currentSource;
+
+    if (data.isPlaylistReady && !hlsReady) {
+      overlayText.textContent = 'Master playlist ready, loading player…';
+      initHls();
+    } else if (data.status === 'probing') {
+      setStatus('Probing…', 'info');
+    } else if (data.status === 'transmuxing') {
+      setStatus(`Transmuxing ${data.progress}%`, 'info');
+      overlayText.textContent = `Transcoding to H.264… ${data.progress}%`;
+    } else if (data.status === 'ready') {
+      setStatus('Ready ✓', 'success');
+    } else if (data.status === 'error') {
+      overlayText.textContent = 'Error: ' + data.error;
+      setStatus('FFmpeg Error', 'error');
+    } else if (data.status === 'idle') {
+      setStatus('Idle', 'info');
       overlay.classList.remove('hidden');
-      overlayText.textContent = 'Probing & Initializing FFmpeg Transmuxer...';
-      progressFill.style.width = '0%';
-      statusText.textContent = 'Probing source...';
-      valCurrentSource.textContent = targetUrl.split('/').pop() || targetUrl;
-
-      // Reset existing HLS instance
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
-      isHlsInitialized = false;
-      audioTracksGrid.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">Probing audio streams...</p>';
-
-      try {
-        const res = await fetch('/api/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: targetUrl })
-        });
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to start stream');
-        }
-      } catch (err) {
-        overlayText.textContent = `Error: ${err.message}`;
-        statusText.textContent = 'Stream error';
-      }
+      overlayText.textContent = 'Paste a URL or search to start streaming.';
     }
+  } catch {
+    setStatus('Server offline', 'error');
+  }
+}
 
-    function setAndLoadUrl(url) {
-      urlInput.value = url;
-      loadStream(url);
-    }
+// ── Helpers ──────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-    btnLoadStream.onclick = () => {
-      const val = urlInput.value.trim();
-      if (val) {
-        loadStream(val);
-      }
-    };
+// keyboard shortcut in search
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('directUrlInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadDirectUrl(); });
+document.getElementById('resolveUrlInput').addEventListener('keydown', e => { if (e.key === 'Enter') doResolve(); });
 
-    urlInput.onkeydown = (e) => {
-      if (e.key === 'Enter') {
-        const val = urlInput.value.trim();
-        if (val) loadStream(val);
-      }
-    };
-
-    // Initialize HLS.js player
-    function initializeHls() {
-      if (isHlsInitialized) return;
-
-      if (Hls.isSupported()) {
-        hls = new Hls({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: false,
-          backBufferLength: 90
-        });
-
-        // Add cache buster query to ensure fresh master playlist
-        hls.loadSource(`${STREAM_URL}?t=${Date.now()}`);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('[HLS] Master playlist parsed successfully.');
-          overlay.classList.add('hidden');
-          statusText.textContent = 'Streaming Ready';
-          isHlsInitialized = true;
-          video.play().catch(() => console.log('Autoplay blocked. Click play to watch.'));
-        });
-
-        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
-          console.log('[HLS] Audio tracks updated:', data.audioTracks);
-          renderAudioTrackButtons(data.audioTracks);
-        });
-
-        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (event, data) => {
-          const currentId = data.id;
-          const currentTrack = hls.audioTracks[currentId];
-          console.log('[HLS] Switched audio track to:', currentTrack);
-          if (currentTrack) {
-            valCurrentAudio.textContent = `${currentTrack.name} (${currentTrack.lang || 'AAC'})`;
-          }
-          highlightActiveAudioButton(currentId);
-        });
-
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.warn('[HLS] Network error, recovering...');
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.warn('[HLS] Media error, recovering...');
-                hls.recoverMediaError();
-                break;
-              default:
-                console.error('[HLS] Unrecoverable error:', data);
-                hls.destroy();
-                break;
-            }
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = STREAM_URL;
-        overlay.classList.add('hidden');
-        statusText.textContent = 'Native HLS Ready';
-      }
-    }
-
-    // Render Audio Buttons in UI
-    function renderAudioTrackButtons(tracks) {
-      if (!tracks || tracks.length === 0) return;
-      audioTracksGrid.innerHTML = '';
-
-      tracks.forEach((track, index) => {
-        const btn = document.createElement('button');
-        btn.className = `audio-btn ${index === hls.audioTrack ? 'active' : ''}`;
-        btn.innerHTML = `
-          <span class="track-name">${track.name || `Track ${index + 1}`}</span>
-          <span class="track-meta">${(track.lang || 'und').toUpperCase()} • Transcoded AAC</span>
-        `;
-
-        btn.onclick = () => {
-          console.log(`[UI] Switching audio track to #${index} (${track.name})`);
-          hls.audioTrack = index;
-          highlightActiveAudioButton(index);
-        };
-
-        audioTracksGrid.appendChild(btn);
-      });
-
-      if (tracks[hls.audioTrack]) {
-        valCurrentAudio.textContent = `${tracks[hls.audioTrack].name} (${tracks[hls.audioTrack].lang || 'AAC'})`;
-      }
-    }
-
-    function highlightActiveAudioButton(activeIndex) {
-      const buttons = audioTracksGrid.querySelectorAll('.audio-btn');
-      buttons.forEach((btn, idx) => {
-        if (idx === activeIndex) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-    }
-
-    // Monitor Transmuxing Status
-    async function checkStatus() {
-      try {
-        const res = await fetch('/api/media/status');
-        const data = await res.json();
-
-        if (data.progress !== undefined) {
-          progressFill.style.width = `${data.progress}%`;
-        }
-
-        if (data.currentSource) {
-          valCurrentSource.textContent = data.currentSource.split('/').pop() || data.currentSource;
-        }
-
-        if (data.isPlaylistReady && !isHlsInitialized) {
-          overlayText.textContent = 'Master Playlist Ready! Loading Stream...';
-          initializeHls();
-        } else if (data.status === 'probing') {
-          statusText.textContent = 'Probing Media...';
-        } else if (data.status === 'transmuxing') {
-          statusText.textContent = `Transmuxing (${data.progress}%)`;
-        } else if (data.status === 'ready') {
-          statusText.textContent = 'Stream Ready (100%)';
-        } else if (data.status === 'error') {
-          overlayText.textContent = `Error: ${data.error}`;
-          statusText.textContent = 'FFmpeg Error';
-        }
-      } catch (err) {
-        console.warn('Status check failed:', err);
-      }
-    }
-
-    // Initial check
-    checkStatus();
-    setInterval(checkStatus, 1500);
-  </script>
+// Start polling
+pollStatus();
+setInterval(pollStatus, 1500);
+</script>
 </body>
 </html>
