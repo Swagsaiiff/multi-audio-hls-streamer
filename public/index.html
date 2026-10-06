@@ -1,51 +1,683 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/icon?family=Material+Icons"
-    />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Media Player - Remote Multi-Audio Streamer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- hls.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0d14;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-input: rgba(10, 14, 23, 0.85);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --accent-primary: #6366f1;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>Netflix</title>
-  </head>
-  <body style="margin: 0">
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
 
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.12) 0%, transparent 40%);
+    }
 
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
-  </body>
+    .container {
+      width: 100%;
+      max-width: 1040px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-card);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: var(--accent-gradient);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* Remote URL Input Section */
+    .url-bar-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .url-input-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .url-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .url-input:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    .btn-submit {
+      background: var(--accent-gradient);
+      border: none;
+      color: white;
+      padding: 0 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn-submit:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+
+    .quick-tags {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .quick-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      color: #cbd5e1;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .quick-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    /* Player Card */
+    .player-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-card);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      background: #000;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    .player-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(10, 13, 20, 0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      z-index: 10;
+      transition: opacity 0.3s ease;
+    }
+
+    .player-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Control Panel */
+    .controls-panel {
+      padding: 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .controls-panel {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Audio Switcher Buttons */
+    .audio-tracks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .audio-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-card);
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+      transition: all 0.2s ease;
+    }
+
+    .audio-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .audio-btn.active {
+      background: var(--accent-gradient);
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+
+    .audio-btn .track-name {
+      font-weight: 600;
+    }
+
+    .audio-btn .track-meta {
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+
+    /* Info Grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .info-item {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      border: 1px solid var(--border-card);
+      overflow: hidden;
+    }
+
+    .info-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .info-val {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-top: 0.2rem;
+      color: #e2e8f0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Progress bar for Transmuxer */
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent-gradient);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-logo">▶</div>
+        <div class="brand-text">
+          <h1>CloudStream / HLS Player Engine</h1>
+          <p>Remote MKV Transmuxing & Dynamic Dual-Audio Switcher</p>
+        </div>
+      </div>
+      <div id="statusBadge" class="status-badge">
+        <div class="status-dot"></div>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Remote URL Input Section -->
+    <div class="url-bar-card">
+      <div class="url-input-row">
+        <input 
+          type="text" 
+          id="urlInput" 
+          class="url-input" 
+          placeholder="Enter direct remote MKV / MP4 URL (e.g. http://server.com/movie.mkv)..." 
+          autocomplete="off"
+        />
+        <button id="btnLoadStream" class="btn-submit">
+          <span>⚡</span> Stream URL
+        </button>
+      </div>
+      <div class="quick-tags">
+        <span>Quick Samples:</span>
+        <span class="quick-chip" onclick="setAndLoadUrl('./media/test.mkv')">Local Dual-Audio (test.mkv)</span>
+        <span class="quick-chip" onclick="setAndLoadUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')">Remote Sample (BigBuckBunny.mp4)</span>
+      </div>
+    </div>
+
+    <!-- Player Card -->
+    <div class="player-card">
+      <div class="video-wrapper">
+        <video id="videoPlayer" controls playsinline></video>
+        <div id="playerOverlay" class="player-overlay">
+          <div class="spinner"></div>
+          <p id="overlayText">Initializing FFmpeg Transmuxer...</p>
+          <div style="width: 260px;">
+            <div class="progress-bar-container">
+              <div id="progressFill" class="progress-bar-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls & Metadata -->
+      <div class="controls-panel">
+        <!-- Audio Track Switcher -->
+        <div class="card-section">
+          <div class="section-title">
+            <span>🔊</span> Select Audio Track
+          </div>
+          <div id="audioTracksGrid" class="audio-tracks-grid">
+            <p style="color: var(--text-muted); font-size: 0.85rem;">Probing audio streams...</p>
+          </div>
+        </div>
+
+        <!-- Stream & Media Specs -->
+        <div class="card-section">
+          <div class="section-title">
+            <span>📊</span> Stream Technical Information
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Active Source</div>
+              <div class="info-val" id="valCurrentSource">test.mkv</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Current Audio</div>
+              <div class="info-val" id="valCurrentAudio">-</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Video Encoder</div>
+              <div class="info-val" style="color: var(--success);">H.264 (libx264 ultrafast)</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Audio Container</div>
+              <div class="info-val" style="color: #60a5fa;">Multi-Track AAC (HLS)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STREAM_URL = '/hls/master.m3u8';
+    const video = document.getElementById('videoPlayer');
+    const overlay = document.getElementById('playerOverlay');
+    const overlayText = document.getElementById('overlayText');
+    const progressFill = document.getElementById('progressFill');
+    const audioTracksGrid = document.getElementById('audioTracksGrid');
+    const statusText = document.getElementById('statusText');
+    const valCurrentSource = document.getElementById('valCurrentSource');
+    const valCurrentAudio = document.getElementById('valCurrentAudio');
+    const urlInput = document.getElementById('urlInput');
+    const btnLoadStream = document.getElementById('btnLoadStream');
+
+    let hls = null;
+    let isHlsInitialized = false;
+
+    // Trigger dynamic stream loading
+    async function loadStream(targetUrl) {
+      if (!targetUrl) return;
+
+      console.log('[App] Requesting stream for:', targetUrl);
+      overlay.classList.remove('hidden');
+      overlayText.textContent = 'Probing & Initializing FFmpeg Transmuxer...';
+      progressFill.style.width = '0%';
+      statusText.textContent = 'Probing source...';
+      valCurrentSource.textContent = targetUrl.split('/').pop() || targetUrl;
+
+      // Reset existing HLS instance
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      isHlsInitialized = false;
+      audioTracksGrid.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">Probing audio streams...</p>';
+
+      try {
+        const res = await fetch('/api/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: targetUrl })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to start stream');
+        }
+      } catch (err) {
+        overlayText.textContent = `Error: ${err.message}`;
+        statusText.textContent = 'Stream error';
+      }
+    }
+
+    function setAndLoadUrl(url) {
+      urlInput.value = url;
+      loadStream(url);
+    }
+
+    btnLoadStream.onclick = () => {
+      const val = urlInput.value.trim();
+      if (val) {
+        loadStream(val);
+      }
+    };
+
+    urlInput.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        const val = urlInput.value.trim();
+        if (val) loadStream(val);
+      }
+    };
+
+    // Initialize HLS.js player
+    function initializeHls() {
+      if (isHlsInitialized) return;
+
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 90
+        });
+
+        // Add cache buster query to ensure fresh master playlist
+        hls.loadSource(`${STREAM_URL}?t=${Date.now()}`);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('[HLS] Master playlist parsed successfully.');
+          overlay.classList.add('hidden');
+          statusText.textContent = 'Streaming Ready';
+          isHlsInitialized = true;
+          video.play().catch(() => console.log('Autoplay blocked. Click play to watch.'));
+        });
+
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
+          console.log('[HLS] Audio tracks updated:', data.audioTracks);
+          renderAudioTrackButtons(data.audioTracks);
+        });
+
+        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (event, data) => {
+          const currentId = data.id;
+          const currentTrack = hls.audioTracks[currentId];
+          console.log('[HLS] Switched audio track to:', currentTrack);
+          if (currentTrack) {
+            valCurrentAudio.textContent = `${currentTrack.name} (${currentTrack.lang || 'AAC'})`;
+          }
+          highlightActiveAudioButton(currentId);
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.warn('[HLS] Network error, recovering...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.warn('[HLS] Media error, recovering...');
+                hls.recoverMediaError();
+                break;
+              default:
+                console.error('[HLS] Unrecoverable error:', data);
+                hls.destroy();
+                break;
+            }
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = STREAM_URL;
+        overlay.classList.add('hidden');
+        statusText.textContent = 'Native HLS Ready';
+      }
+    }
+
+    // Render Audio Buttons in UI
+    function renderAudioTrackButtons(tracks) {
+      if (!tracks || tracks.length === 0) return;
+      audioTracksGrid.innerHTML = '';
+
+      tracks.forEach((track, index) => {
+        const btn = document.createElement('button');
+        btn.className = `audio-btn ${index === hls.audioTrack ? 'active' : ''}`;
+        btn.innerHTML = `
+          <span class="track-name">${track.name || `Track ${index + 1}`}</span>
+          <span class="track-meta">${(track.lang || 'und').toUpperCase()} • Transcoded AAC</span>
+        `;
+
+        btn.onclick = () => {
+          console.log(`[UI] Switching audio track to #${index} (${track.name})`);
+          hls.audioTrack = index;
+          highlightActiveAudioButton(index);
+        };
+
+        audioTracksGrid.appendChild(btn);
+      });
+
+      if (tracks[hls.audioTrack]) {
+        valCurrentAudio.textContent = `${tracks[hls.audioTrack].name} (${tracks[hls.audioTrack].lang || 'AAC'})`;
+      }
+    }
+
+    function highlightActiveAudioButton(activeIndex) {
+      const buttons = audioTracksGrid.querySelectorAll('.audio-btn');
+      buttons.forEach((btn, idx) => {
+        if (idx === activeIndex) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Monitor Transmuxing Status
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/media/status');
+        const data = await res.json();
+
+        if (data.progress !== undefined) {
+          progressFill.style.width = `${data.progress}%`;
+        }
+
+        if (data.currentSource) {
+          valCurrentSource.textContent = data.currentSource.split('/').pop() || data.currentSource;
+        }
+
+        if (data.isPlaylistReady && !isHlsInitialized) {
+          overlayText.textContent = 'Master Playlist Ready! Loading Stream...';
+          initializeHls();
+        } else if (data.status === 'probing') {
+          statusText.textContent = 'Probing Media...';
+        } else if (data.status === 'transmuxing') {
+          statusText.textContent = `Transmuxing (${data.progress}%)`;
+        } else if (data.status === 'ready') {
+          statusText.textContent = 'Stream Ready (100%)';
+        } else if (data.status === 'error') {
+          overlayText.textContent = `Error: ${data.error}`;
+          statusText.textContent = 'FFmpeg Error';
+        }
+      } catch (err) {
+        console.warn('Status check failed:', err);
+      }
+    }
+
+    // Initial check
+    checkStatus();
+    setInterval(checkStatus, 1500);
+  </script>
+</body>
 </html>
